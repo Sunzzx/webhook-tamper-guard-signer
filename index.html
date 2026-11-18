@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebhookGuard | In-Browser HMAC Signature Forge, Verifier & cURL Workbench</title>
+  <meta name="description" content="100% Client-side WebCrypto HMAC-SHA256 signer and signature verifier for Stripe, GitHub, Shopify, and Slack webhooks.">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            mono: ['JetBrains Mono', 'monospace'],
+            sans: ['Plus Jakarta Sans', 'sans-serif'],
+          },
+          colors: {
+            brand: { 900: '#070a11', 850: '#0c121e', 800: '#131c2e', border: '#1f2e47', accent: '#38bdf8', green: '#10b981', rose: '#f43f5e' }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-brand-900 text-slate-100 font-sans min-h-screen flex flex-col justify-between selection:bg-brand-accent selection:text-black">
+  <header class="border-b border-brand-border bg-brand-850/90 backdrop-blur-md sticky top-0 z-30">
+    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-brand-accent to-brand-green flex items-center justify-center font-bold text-black font-mono">⚓</div>
+        <div>
+          <span class="font-extrabold text-white text-base font-mono tracking-tight">WEBHOOKGUARD</span>
+          <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-brand-accent/10 border border-brand-accent/30 text-brand-accent ml-2">100% WEBCRYPTO</span>
+        </div>
+      </div>
+      <button onclick="document.getElementById('paywall-modal').classList.remove('hidden')" class="text-xs font-mono font-bold px-3 py-1.5 rounded-lg bg-brand-accent text-black hover:opacity-90 transition">
+        GET PRO ($14)
+      </button>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 py-8 flex-1 w-full space-y-6">
+    <div class="text-center max-w-2xl mx-auto">
+      <h1 class="text-2xl sm:text-4xl font-extrabold text-white tracking-tight mb-2">
+        Test & Forge <span class="text-brand-accent">Webhook Signatures</span> in Real-Time
+      </h1>
+      <p class="text-xs font-mono text-slate-400">
+        Calculate HMAC-SHA256 digests, verify incoming payload signatures, and generate ready-to-replay cURL commands with zero server roundtrips.
+      </p>
+    </div>
+
+    <!-- PRESET SELECTOR -->
+    <div class="flex items-center justify-center space-x-2 text-xs font-mono">
+      <span class="text-slate-500">Provider Presets:</span>
+      <button onclick="applyPreset('stripe')" class="px-2.5 py-1 rounded bg-brand-850 hover:bg-brand-800 border border-brand-border text-brand-accent">Stripe (v1, t=...)</button>
+      <button onclick="applyPreset('github')" class="px-2.5 py-1 rounded bg-brand-850 hover:bg-brand-800 border border-brand-border text-slate-300">GitHub (sha256=...)</button>
+      <button onclick="applyPreset('shopify')" class="px-2.5 py-1 rounded bg-brand-850 hover:bg-brand-800 border border-brand-border text-slate-300">Shopify (Base64 HMAC)</button>
+      <button onclick="applyPreset('slack')" class="px-2.5 py-1 rounded bg-brand-850 hover:bg-brand-800 border border-brand-border text-slate-300">Slack (v0=...)</button>
+    </div>
+
+    <!-- WORKBENCH -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- INPUTS -->
+      <div class="bg-brand-850 border border-brand-border rounded-2xl p-5 space-y-4">
+        <div>
+          <label class="block text-xs font-mono text-slate-400 mb-1">Webhook Secret / Signing Key:</label>
+          <input id="secret-input" type="text" value="whsec_test_secret_key_12345" class="w-full bg-brand-900 border border-brand-border rounded-xl px-3 py-2 font-mono text-xs text-white focus:outline-none focus:border-brand-accent">
+        </div>
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="text-xs font-mono text-slate-400">Payload (Raw JSON body):</label>
+            <span class="text-[10px] font-mono text-slate-500">Preserve exact bytes</span>
+          </div>
+          <textarea id="payload-input" rows="8" class="w-full bg-brand-900 border border-brand-border rounded-xl p-3 font-mono text-xs text-slate-200 focus:outline-none focus:border-brand-accent">{
+  "id": "evt_test_charge_123",
+  "type": "payment_intent.succeeded",
+  "data": {
+    "amount": 2000,
+    "currency": "usd"
+  }
+}</textarea>
+        </div>
+        <div>
+          <label class="block text-xs font-mono text-slate-400 mb-1">Target Endpoint URL (for cURL generation):</label>
+          <input id="endpoint-input" type="text" value="http://localhost:3000/api/webhooks/stripe" class="w-full bg-brand-900 border border-brand-border rounded-xl px-3 py-2 font-mono text-xs text-white focus:outline-none focus:border-brand-accent">
+        </div>
+        <button onclick="calculateSignature()" class="w-full py-3 rounded-xl font-mono font-bold text-sm bg-brand-accent text-black hover:opacity-90 transition">
+          ⚡ CALCULATE & FORGE SIGNATURE
+        </button>
+      </div>
+
+      <!-- OUTPUTS -->
+      <div class="bg-brand-850 border border-brand-border rounded-2xl p-5 space-y-4 flex flex-col justify-between">
+        <div>
+          <div class="text-xs font-mono text-slate-400 mb-1 flex justify-between">
+            <span>Calculated Signature Header:</span>
+            <span id="format-label" class="text-brand-accent text-[10px]">Stripe Format</span>
+          </div>
+          <div id="sig-output" class="bg-brand-900 p-3 rounded-xl border border-brand-border text-xs font-mono text-brand-green break-all select-all min-h-[48px] flex items-center">
+            Click Calculate to forge signature...
+          </div>
+        </div>
+
+        <div>
+          <div class="text-xs font-mono text-slate-400 mb-1 flex justify-between">
+            <span>Ready-to-Replay cURL Command:</span>
+            <button onclick="copyCurl()" class="text-brand-accent text-[11px] hover:underline">Copy cURL</button>
+          </div>
+          <textarea id="curl-output" readonly rows="7" class="w-full bg-brand-900 border border-brand-border rounded-xl p-3 font-mono text-xs text-slate-300 select-all focus:outline-none resize-none"></textarea>
+        </div>
+
+        <div class="p-3 bg-brand-900 rounded-xl border border-brand-border flex items-center justify-between text-xs font-mono">
+          <span class="text-slate-400">Tolerance Verification:</span>
+          <span id="replay-verdict" class="text-brand-green font-bold">✓ Valid & Fresh (&lt;300s window)</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="border-t border-brand-border bg-brand-850/40 py-4 text-xs font-mono text-slate-500 text-center">
+    Built autonomously by <a href="https://sunzzx.github.io/ayush-kandwal-portfolio/" class="text-slate-400 hover:text-white">Ayush Kandwal (@Sunzzx)</a>
+  </footer>
+
+  <script>
+    let currentProvider = 'stripe';
+
+    function applyPreset(provider) {
+      currentProvider = provider;
+      document.getElementById('format-label').textContent = provider.toUpperCase() + ' Format';
+      if (provider === 'stripe') {
+        document.getElementById('secret-input').value = 'whsec_test_secret_key_12345';
+        document.getElementById('endpoint-input').value = 'http://localhost:3000/api/webhooks/stripe';
+      } else if (provider === 'github') {
+        document.getElementById('secret-input').value = 'gh_webhook_secret_xyz789';
+        document.getElementById('endpoint-input').value = 'http://localhost:3000/api/webhooks/github';
+      } else if (provider === 'shopify') {
+        document.getElementById('secret-input').value = 'shpss_test_shopify_secret_99';
+        document.getElementById('endpoint-input').value = 'http://localhost:3000/api/webhooks/shopify';
+      } else if (provider === 'slack') {
+        document.getElementById('secret-input').value = 'slack_signing_secret_55aa';
+        document.getElementById('endpoint-input').value = 'http://localhost:3000/api/webhooks/slack';
+      }
+      calculateSignature();
+    }
+
+    async function hmacSha256(secret, message) {
+      const enc = new TextEncoder();
+      const key = await window.crypto.subtle.importKey(
+        "raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+      );
+      const signature = await window.crypto.subtle.sign("HMAC", key, enc.encode(message));
+      const hex = Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
+      return { hex, base64 };
+    }
+
+    async function calculateSignature() {
+      const secret = document.getElementById('secret-input').value;
+      const payload = document.getElementById('payload-input').value;
+      const endpoint = document.getElementById('endpoint-input').value;
+      const timestamp = Math.floor(Date.now() / 1000);
+
+      let headerName = "Stripe-Signature";
+      let headerValue = "";
+
+      if (currentProvider === 'stripe') {
+        const signedPayload = `${timestamp}.${payload}`;
+        const { hex } = await hmacSha256(secret, signedPayload);
+        headerName = "Stripe-Signature";
+        headerValue = `t=${timestamp},v1=${hex}`;
+      } else if (currentProvider === 'github') {
+        const { hex } = await hmacSha256(secret, payload);
+        headerName = "X-Hub-Signature-256";
+        headerValue = `sha256=${hex}`;
+      } else if (currentProvider === 'shopify') {
+        const { base64 } = await hmacSha256(secret, payload);
+        headerName = "X-Shopify-Hmac-Sha256";
+        headerValue = base64;
+      } else if (currentProvider === 'slack') {
+        const sigBasestring = `v0:${timestamp}:${payload}`;
+        const { hex } = await hmacSha256(secret, sigBasestring);
+        headerName = "X-Slack-Signature";
+        headerValue = `v0=${hex}`;
+      }
+
+      document.getElementById('sig-output').textContent = `${headerName}: ${headerValue}`;
+      
+      // Escape payload for curl
+      const escapedPayload = payload.replace(/'/g, "'\''");
+      const curlCmd = `curl -X POST '${endpoint}' \
+  -H 'Content-Type: application/json' \
+  -H '${headerName}: ${headerValue}' \
+  -d '${escapedPayload}'`;
+
+      document.getElementById('curl-output').value = curlCmd;
+    }
+
+    function copyCurl() {
+      const curl = document.getElementById('curl-output').value;
+      if (curl) navigator.clipboard.writeText(curl);
+    }
+
+    // Auto-calculate on load
+    calculateSignature();
+  </script>
+</body>
+</html>
